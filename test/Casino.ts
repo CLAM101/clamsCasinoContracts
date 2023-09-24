@@ -310,6 +310,8 @@ describe("Casino", async function () {
 
       const convertedPotGame1 = ethers.formatUnits(game1Pot, 18);
 
+      expect(convertedPotGame1).to.equal("0.0");
+
       console.log(
         "Game 1 Pot",
         convertedPotGame1,
@@ -415,8 +417,8 @@ describe("Casino", async function () {
           expect(gameId).to.equal(2);
           expect(player).to.exist;
 
-          console.log("PlayerJoined Event Game 1 - gameId:", gameId.toString());
-          console.log("PlayerJoined Event Game 1 - player:", player.toString());
+          console.log("PlayerJoined Event Game 2 - gameId:", gameId.toString());
+          console.log("PlayerJoined Event Game 2 - player:", player.toString());
         }
 
         if (parsedEvent && parsedEvent.name === "RequestSent") {
@@ -428,9 +430,9 @@ describe("Casino", async function () {
           expect(requestId).to.equal(2);
           expect(numwords).to.equal(1);
 
-          console.log("Request sent Game 1 Game Id", gameId);
-          console.log("Request sent Game 1 Request Id", requestId);
-          console.log("Request sent Game 1 numwords", numwords);
+          console.log("Request sent Game 2 Game Id", gameId);
+          console.log("Request sent Game 2 Request Id", requestId);
+          console.log("Request sent Game 2 numwords", numwords);
         }
 
         if (parsedEvent && parsedEvent.name === "RequestFulfilled") {
@@ -441,9 +443,9 @@ describe("Casino", async function () {
           expect(requestId).to.equal(2);
           expect(randomWords).to.exist;
 
-          console.log("RequestFulfilled Game 1 Game Id", gameId);
-          console.log("RequestFulfilled Game 1 Request Id", requestId);
-          console.log("RequestFulfilled Game 1 numwords", randomWords);
+          console.log("RequestFulfilled Game 2 Game Id", gameId);
+          console.log("RequestFulfilled Game 2 Request Id", requestId);
+          console.log("RequestFulfilled Game 2 numwords", randomWords);
         }
         if (parsedEvent && parsedEvent.name === "GameEnded") {
           const gameId = parsedEvent.args.gameId;
@@ -452,8 +454,8 @@ describe("Casino", async function () {
           expect(gameId).to.equal(2);
           expect(winner).to.exist;
 
-          console.log("Game Ended Game Id Game 1", gameId);
-          console.log("Game Ended Winner Game 1", winner);
+          console.log("Game Ended Game Id Game 2", gameId);
+          console.log("Game Ended Winner Game 2", winner);
         }
       }
 
@@ -478,6 +480,8 @@ describe("Casino", async function () {
       );
 
       const convertedPotGame2 = ethers.formatUnits(game2Pot, 18);
+
+      expect(convertedPotGame2).to.equal("0.0");
 
       console.log(
         "Game 2 Pot",
