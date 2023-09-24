@@ -26,27 +26,37 @@ contract Casino is VRFConsumerBaseV2, Ownable {
     uint256[] public requestIds;
     uint256 public lastRequestId;
     uint public randomWordsNum;
-    event RequestSent(uint256 requestId, uint32 numwords);
-    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
-
+    event RequestSent(uint256 requestId, uint32 numwords, uint256 gameId);
+    event RequestFulfilled(
+        uint256 requestId,
+        uint256[] randomWords,
+        uint256 gameId
+    );
     struct RequestStatus {
         uint256[] _randomWords;
         bool exists;
         bool fulfilled;
+        uint256 gameId;
     }
     mapping(uint256 => RequestStatus) public s_requests;
+    mapping(uint256 => address) public pastWinners;
 
     //game related variables
-    uint public maxPlayers;
     event GameStarted(uint gameId, uint maxPlayers, uint entryfee);
     event PlayerJoined(uint gameId, address player);
     event GameEnded(uint gameId, address recentWinner);
-    mapping(address => uint32) public s_playerNumbers;
-    address[] public players;
-    bool public gameStarted;
-    uint public gameId;
-    uint public entryfee;
-    address public recentWinner;
+    uint256 gameCount;
+    struct Game {
+        uint256 gameId;
+        address creator;
+        bool isActive;
+        uint256 maxPlayers;
+        uint256 entryFee;
+        address[] players;
+        uint256 currentPot;
+    }
+
+    mapping(uint256 => Game) public games;
 
     constructor(
         uint64 subscriptionId,
@@ -64,47 +74,62 @@ contract Casino is VRFConsumerBaseV2, Ownable {
 
     fallback() external payable {}
 
-    function startGame(uint _maxPlayers, uint _entryfee) public onlyOwner {
-        require(!gameStarted, "Game already started");
+    function startGame(uint _maxPlayers, uint _entryfee) public {
+        gameCount++;
 
-        players = new address[](0);
+        uint256 gameId = gameCount;
 
-        maxPlayers = _maxPlayers;
+        games[gameId] = Game(
+            gameId,
+            msg.sender,
+            true,
+            _maxPlayers,
+            _entryfee,
+            new address[](0),
+            0
+        );
 
-        gameStarted = true;
-        entryfee = _entryfee;
-
-        gameId += 1;
-        emit GameStarted(gameId, maxPlayers, entryfee);
+        emit GameStarted(gameId, _maxPlayers, _entryfee);
     }
 
-    function joinGame(uint256 _amount) external {
-        require(gameStarted, "The Game has not started");
-        require(players.length < maxPlayers, "Maximum players already joined");
-        require(_amount == entryfee, "Bet amount does not equl entry fee");
+    function joinGame(uint256 _amount, uint256 _gameId) external {
+        Game storage fetchedGame = games[_gameId];
 
-        players.push(msg.sender);
-        currentPot += _amount * 10 ** 18;
+        require(fetchedGame.isActive == true, "Game is not active");
+
+        require(
+            fetchedGame.players.length < fetchedGame.maxPlayers,
+            "Maximum players already joined"
+        );
+        require(
+            _amount == fetchedGame.entryFee,
+            "Bet amount does not equal entry fee"
+        );
+
+        fetchedGame.players.push(msg.sender);
+        fetchedGame.currentPot += _amount * 10 ** 18;
 
         clamsToken.transferFrom(msg.sender, address(this), _amount * 10 ** 18);
 
-        emit PlayerJoined(gameId, msg.sender);
+        emit PlayerJoined(_gameId, msg.sender);
 
-        if (players.length == maxPlayers) {
-            getRandomWinner();
+        if (fetchedGame.players.length == fetchedGame.maxPlayers) {
+            getRandomWinner(_gameId);
             return;
         }
     }
 
-    function getRandomWinner() internal {
-        requestRandomWords();
+    function getRandomWinner(uint256 gameId) internal {
+        requestRandomWords(gameId);
     }
 
     /**
      * @notice Requests randomness
      * Assumes the subscription is funded sufficiently; "Words" refers to unit of data in Computer Science
      */
-    function requestRandomWords() internal returns (uint256 requestId) {
+    function requestRandomWords(
+        uint256 _gameId
+    ) internal returns (uint256 requestId) {
         // Will revert if subscription is not set and funded.
         requestId = COORDINATOR.requestRandomWords(
             s_keyHash,
@@ -117,12 +142,11 @@ contract Casino is VRFConsumerBaseV2, Ownable {
         s_requests[requestId] = RequestStatus({
             _randomWords: new uint256[](0),
             exists: true,
-            fulfilled: false
+            fulfilled: false,
+            gameId: _gameId
         });
 
-        requestIds.push(requestId);
-        lastRequestId = requestId;
-        emit RequestSent(requestId, numWords);
+        emit RequestSent(requestId, numWords, _gameId);
         return requestId; // requestID is a uint.
     }
 
@@ -137,34 +161,42 @@ contract Casino is VRFConsumerBaseV2, Ownable {
         uint256[] memory _randomWords
     ) internal override {
         require(s_requests[_requestId].exists, "request not found");
-        s_requests[_requestId].fulfilled = true;
-        s_requests[_requestId]._randomWords = _randomWords;
+
+        RequestStatus storage fetchedRequest = s_requests[_requestId];
+        fetchedRequest.fulfilled = true;
+        fetchedRequest._randomWords = _randomWords;
         randomWordsNum = _randomWords[0]; // Set array-index to variable, easier to play with
-        emit RequestFulfilled(_requestId, _randomWords);
+        emit RequestFulfilled(_requestId, _randomWords, fetchedRequest.gameId);
 
-        uint256 winnerIndex = randomWordsNum % players.length;
+        Game storage fetchedGame = games[fetchedRequest.gameId];
 
-        recentWinner = players[winnerIndex];
-        clamsToken.approve(address(this), currentPot);
+        uint256 winnerIndex = randomWordsNum % fetchedGame.players.length;
+
+        address recentWinner = fetchedGame.players[winnerIndex];
+        clamsToken.approve(address(this), fetchedGame.currentPot);
 
         bool success = clamsToken.transferFrom(
             address(this),
             recentWinner,
-            currentPot
+            fetchedGame.currentPot
         );
         require(success, "Could not send winnings");
 
-        gameStarted = false;
-        currentPot = 0;
-        emit GameEnded(gameId, recentWinner);
+        fetchedGame.isActive = false;
+        fetchedGame.currentPot = 0;
+
+        pastWinners[fetchedGame.gameId] = recentWinner;
+        emit GameEnded(fetchedGame.gameId, recentWinner);
     }
 
-    function getCurrentPot() public view returns (uint256) {
-        return currentPot;
+    function getPotById(uint256 _gameId) public view returns (uint256) {
+        return games[_gameId].currentPot;
     }
 
-    function getPlayers() public view returns (address[] memory) {
-        return players;
+    function getPlayersById(
+        uint256 _gameId
+    ) public view returns (address[] memory) {
+        return games[_gameId].players;
     }
 
     function currentTime() public view returns (uint) {
@@ -173,9 +205,13 @@ contract Casino is VRFConsumerBaseV2, Ownable {
 
     function getRequestStatus(
         uint256 _requestId
-    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
+    )
+        external
+        view
+        returns (bool fulfilled, uint256[] memory randomWords, uint256 gameId)
+    {
         require(s_requests[_requestId].exists, "request not found");
         RequestStatus memory request = s_requests[_requestId];
-        return (request.fulfilled, request._randomWords);
+        return (request.fulfilled, request._randomWords, request.gameId);
     }
 }

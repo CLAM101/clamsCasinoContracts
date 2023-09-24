@@ -1,6 +1,6 @@
-import * as dotenv from "dotenv";
 import { HardhatUserConfig, extendEnvironment, task } from "hardhat/config";
-import { ethers } from "hardhat";
+
+import * as dotenv from "dotenv";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-verify";
 dotenv.config();
