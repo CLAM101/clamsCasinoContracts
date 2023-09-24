@@ -5,6 +5,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { VRFCoordinatorV2Mock, Casino, ClamsToken } from "../typechain-types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { getEventsCasino } from "../TestHelpers/eventListener";
 
 describe("Casino", async function () {
   let casino: Casino,
@@ -81,25 +82,16 @@ describe("Casino", async function () {
   });
 
   describe("Deployment", async function () {
-    it("Starts the game", async function () {
-      // const entryFee = ethers.parseEther("1");
+    it("Starts Game 1", async function () {
       const recieptGame1 = await casino.connect(owner).startGame(2, 50);
 
       await recieptGame1.wait();
 
-      const recieptGame2 = await casino.connect(owner).startGame(2, 50);
-
-      await recieptGame2.wait();
-
-      const events = await ethers.provider.getLogs({
-        fromBlock: recieptGame1.blockNumber,
-        toBlock: recieptGame2.blockNumber,
-        address: casino.target, // Address of the contract where the event was emitted
-      });
-
-      const eventInterface = new ethers.Interface([
-        "event GameStarted(uint256 gameId, uint256 maxPlayers, uint256 entryfee)",
-      ]);
+      const { eventInterface, events } = await getEventsCasino(
+        recieptGame1.blockNumber,
+        recieptGame1.blockNumber,
+        casino
+      );
 
       for (const event of events) {
         const parsedEvent = eventInterface.parseLog(event);
@@ -110,20 +102,61 @@ describe("Casino", async function () {
           const entryfee = parsedEvent.args.entryfee;
 
           // Perform assertions or checks based on the event parameters
-          // expect(gameId).to.equal(1); // Replace 1 with the expected value
-          expect(maxPlayers).to.equal(2); // Replace 2 with the expected value
-          expect(entryfee).to.equal(50); // Compare with the expected entryFee
-          console.log("GameStarted Event - gameId:", gameId.toString());
-          console.log("GameStarted Event - maxPlayers:", maxPlayers.toString());
-          console.log("GameStarted Event - entryfee:", entryfee.toString());
+          expect(gameId).to.equal(1);
+          expect(maxPlayers).to.equal(2);
+          expect(entryfee).to.equal(50);
+          console.log("GameStarted Event Game 1 - gameId:", gameId.toString());
+          console.log(
+            "GameStarted Event Game 1 - maxPlayers:",
+            maxPlayers.toString()
+          );
+          console.log(
+            "GameStarted Event Game 1 - entryfee:",
+            entryfee.toString()
+          );
         }
       }
     });
 
-    it("Allows Players to Join Separate Games", async function () {
+    it("Starts Game 2", async function () {
+      const recieptGame2 = await casino.connect(owner).startGame(2, 100);
+
+      await recieptGame2.wait();
+
+      const { eventInterface, events } = await getEventsCasino(
+        recieptGame2.blockNumber,
+        recieptGame2.blockNumber,
+        casino
+      );
+
+      for (const event of events) {
+        const parsedEvent = eventInterface.parseLog(event);
+        if (parsedEvent && parsedEvent.name === "GameStarted") {
+          // Access the event parameters
+          const gameId = parsedEvent.args.gameId;
+          const maxPlayers = parsedEvent.args.maxPlayers;
+          const entryfee = parsedEvent.args.entryfee;
+
+          // Perform assertions or checks based on the event parameters
+          expect(gameId).to.equal(2);
+          expect(maxPlayers).to.equal(2);
+          expect(entryfee).to.equal(100);
+          console.log("GameStarted Event Game 2 - gameId:", gameId.toString());
+          console.log(
+            "GameStarted Event Game 2 - maxPlayers:",
+            maxPlayers.toString()
+          );
+          console.log(
+            "GameStarted Event Game 2 - entryfee:",
+            entryfee.toString()
+          );
+        }
+      }
+    });
+
+    it("Allows Players to Join and selects winner game 1", async function () {
       const tokenAmount = 50;
       const gameIdFirstGame = 1;
-      const gameIdSecondGame = 2;
 
       // first Game Player Claims
       const player1Game1ClaimAllocation = await clamstoken
@@ -136,35 +169,24 @@ describe("Casino", async function () {
       await player1Game1ClaimAllocation.wait();
       await player2Game1ClaimAllocation.wait();
 
-      const player1Game1Balance = await clamstoken.balanceOf(otherAccount);
-      const player2Game1Balance = await clamstoken.balanceOf(thirdAccount);
+      const player1Game1Balance = ethers.formatUnits(
+        await clamstoken.balanceOf(otherAccount),
+        18
+      );
+
+      const player2Game1Balance = ethers.formatUnits(
+        await clamstoken.balanceOf(thirdAccount),
+        18
+      );
+
+      expect(player1Game1Balance).to.equal("5000.0");
+      expect(player2Game1Balance).to.equal("5000.0");
 
       console.log(
         "player 1 Game 1 balance",
         player1Game1Balance,
         "player 2 Game 1 balance",
         player2Game1Balance
-      );
-
-      //second game player claims
-      const player1Game2ClaimAllocation = await clamstoken
-        .connect(fifthAccount)
-        .claimAllocation();
-      const player2Game2ClaimAllocation = await clamstoken
-        .connect(sixthAccount)
-        .claimAllocation();
-
-      await player1Game2ClaimAllocation.wait();
-      await player2Game2ClaimAllocation.wait();
-
-      const player1Game2Balance = await clamstoken.balanceOf(fifthAccount);
-      const player2Game2Balance = await clamstoken.balanceOf(sixthAccount);
-
-      console.log(
-        "player 1 Game 2 balance",
-        player1Game2Balance,
-        "player 2 Game 2 balance",
-        player2Game2Balance
       );
 
       // Game 1 token approvals
@@ -180,19 +202,6 @@ describe("Casino", async function () {
       await player1TokenApproval.wait();
       await player2TokenApproval.wait();
 
-      // game 2 token approvals
-      //approve tokens for spend
-      const player1Game2TokenApproval = await clamstoken
-        .connect(fifthAccount)
-        .approve(casino.target, tokenAmount);
-      const player2Game2TokenApproval = await clamstoken
-        .connect(sixthAccount)
-        .approve(casino.target, tokenAmount);
-
-      //wait for transactions
-      await player1Game2TokenApproval.wait();
-      await player2Game2TokenApproval.wait();
-
       //Game one Join and stake
       // join game and stake tokens
       const player1joinGame = await casino
@@ -205,18 +214,6 @@ describe("Casino", async function () {
       await player1joinGame.wait();
       await player2joinGame.wait();
 
-      // Game two join and stake
-      // join game and stake tokens
-      const player1Game2joinGame = await casino
-        .connect(fifthAccount)
-        .joinGame(tokenAmount, gameIdSecondGame);
-      const player2Game2joinGame = await casino
-        .connect(sixthAccount)
-        .joinGame(tokenAmount, gameIdSecondGame);
-
-      await player1Game2joinGame.wait();
-      await player2Game2joinGame.wait();
-
       // random Num and confirmation game 1
       let sudoRandomNumGame1 = [Math.trunc(Math.random() * 10000000)];
 
@@ -228,31 +225,13 @@ describe("Casino", async function () {
 
       await confirmationGame1.wait();
 
-      // random num and confirmation game 2
-      let sudoRandomNumGame2 = [Math.trunc(Math.random() * 10000000)];
-
-      const confirmationGame2 = await v2mock.fulfillRandomWordsWithOverride(
-        2,
-        casino.target,
-        sudoRandomNumGame2
-      );
-
-      await confirmationGame2.wait();
-
       const latestBlock = await ethers.provider.getBlockNumber();
 
-      const events = await ethers.provider.getLogs({
-        fromBlock: player1joinGame.blockNumber,
-        toBlock: latestBlock,
-        address: casino.target, // Address of the contract where the event was emitted
-      });
-
-      const eventInterface = new ethers.Interface([
-        "event PlayerJoined(uint gameId, address player)",
-        "event GameEnded(uint gameId, address winner)",
-        "event RequestSent(uint256 requestId, uint32 numwords, uint256 gameId)",
-        "event RequestFulfilled(uint256 requestId, uint256[] randomWords, uint256 gameId)",
-      ]);
+      const { eventInterface, events } = await getEventsCasino(
+        player1joinGame.blockNumber,
+        latestBlock,
+        casino
+      );
 
       for (const event of events) {
         const parsedEvent = eventInterface.parseLog(event);
@@ -261,29 +240,52 @@ describe("Casino", async function () {
           const eventArgs = parsedEvent.args;
 
           console.log("Player Joined event args", eventArgs);
-          // Access the event parameters
+
           const gameId = parsedEvent.args.gameId;
           const player = parsedEvent.args.player;
 
-          // Perform assertions or checks based on the event parameters
-          // expect(gameId).to.equal(1); // Replace 1 with the expected value
-          //  expect(player).to.exist; // Replace 1 with the expected value
+          expect(gameId).to.equal(1);
+          expect(player).to.exist;
 
-          console.log("PlayerJoined Event - gameId:", gameId.toString());
-          console.log("PlayerJoined Event - player:", player.toString());
+          console.log("PlayerJoined Event Game 1 - gameId:", gameId.toString());
+          console.log("PlayerJoined Event Game 1 - player:", player.toString());
         }
 
-        if (parsedEvent && parsedEvent.name === "GameEnded") {
-          const eventArgs = parsedEvent.args;
-          console.log("Game Ended event args", eventArgs);
-        }
         if (parsedEvent && parsedEvent.name === "RequestSent") {
-          const eventArgs = parsedEvent.args;
-          console.log("Request Sent args event args", eventArgs);
+          const gameId = parsedEvent.args.gameId;
+          const requestId = parsedEvent.args.requestId;
+          const numwords = parsedEvent.args.numwords;
+
+          expect(gameId).to.equal(1);
+          expect(requestId).to.equal(1);
+          expect(numwords).to.equal(1);
+
+          console.log("Request sent Game 1 Game Id", gameId);
+          console.log("Request sent Game 1 Request Id", requestId);
+          console.log("Request sent Game 1 numwords", numwords);
         }
+
         if (parsedEvent && parsedEvent.name === "RequestFulfilled") {
-          const eventArgs = parsedEvent.args;
-          console.log("Request fulfilled args event args", eventArgs);
+          const gameId = parsedEvent.args.gameId;
+          const requestId = parsedEvent.args.requestId;
+          const randomWords = parsedEvent.args.randomWords;
+          expect(gameId).to.equal(1);
+          expect(requestId).to.equal(1);
+          expect(randomWords).to.exist;
+
+          console.log("RequestFulfilled Game 1 Game Id", gameId);
+          console.log("RequestFulfilled Game 1 Request Id", requestId);
+          console.log("RequestFulfilled Game 1 numwords", randomWords);
+        }
+        if (parsedEvent && parsedEvent.name === "GameEnded") {
+          const gameId = parsedEvent.args.gameId;
+          const winner = parsedEvent.args.winner;
+
+          expect(gameId).to.equal(1);
+          expect(winner).to.exist;
+
+          console.log("Game Ended Game Id Game 1", gameId);
+          console.log("Game Ended Winner Game 1", winner);
         }
       }
 
@@ -318,6 +320,142 @@ describe("Casino", async function () {
         "request status Game 1",
         requestStatusGame1
       );
+    });
+
+    it("Allows Players to Join and selects winner game 2", async function () {
+      const gameIdSecondGame = 2;
+      const tokenAmount = 100;
+
+      //second game player claims
+      const player1Game2ClaimAllocation = await clamstoken
+        .connect(fifthAccount)
+        .claimAllocation();
+      const player2Game2ClaimAllocation = await clamstoken
+        .connect(sixthAccount)
+        .claimAllocation();
+
+      await player1Game2ClaimAllocation.wait();
+      await player2Game2ClaimAllocation.wait();
+
+      const player1Game2Balance = ethers.formatUnits(
+        await clamstoken.balanceOf(fifthAccount),
+        18
+      );
+
+      const player2Game2Balance = ethers.formatUnits(
+        await clamstoken.balanceOf(sixthAccount),
+        18
+      );
+
+      expect(player1Game2Balance).to.equal("5000.0");
+      expect(player2Game2Balance).to.equal("5000.0");
+
+      console.log(
+        "player 1 Game 2 balance",
+        player1Game2Balance,
+        "player 2 Game 2 balance",
+        player2Game2Balance
+      );
+
+      // game 2 token approvals
+      //approve tokens for spend
+      const player1Game2TokenApproval = await clamstoken
+        .connect(fifthAccount)
+        .approve(casino.target, tokenAmount);
+      const player2Game2TokenApproval = await clamstoken
+        .connect(sixthAccount)
+        .approve(casino.target, tokenAmount);
+
+      //wait for transactions
+      await player1Game2TokenApproval.wait();
+      await player2Game2TokenApproval.wait();
+
+      // Game two join and stake
+      // join game and stake tokens
+      const player1Game2joinGame = await casino
+        .connect(fifthAccount)
+        .joinGame(tokenAmount, gameIdSecondGame);
+      const player2Game2joinGame = await casino
+        .connect(sixthAccount)
+        .joinGame(tokenAmount, gameIdSecondGame);
+
+      await player1Game2joinGame.wait();
+      await player2Game2joinGame.wait();
+
+      // random num and confirmation game 2
+      let sudoRandomNumGame2 = [Math.trunc(Math.random() * 10000000)];
+
+      const confirmationGame2 = await v2mock.fulfillRandomWordsWithOverride(
+        2,
+        casino.target,
+        sudoRandomNumGame2
+      );
+
+      await confirmationGame2.wait();
+
+      const latestBlock = await ethers.provider.getBlockNumber();
+
+      const { eventInterface, events } = await getEventsCasino(
+        player1Game2joinGame.blockNumber,
+        latestBlock,
+        casino
+      );
+
+      for (const event of events) {
+        const parsedEvent = eventInterface.parseLog(event);
+
+        if (parsedEvent && parsedEvent.name === "PlayerJoined") {
+          const eventArgs = parsedEvent.args;
+
+          console.log("Player Joined event args", eventArgs);
+
+          const gameId = parsedEvent.args.gameId;
+          const player = parsedEvent.args.player;
+
+          expect(gameId).to.equal(2);
+          expect(player).to.exist;
+
+          console.log("PlayerJoined Event Game 1 - gameId:", gameId.toString());
+          console.log("PlayerJoined Event Game 1 - player:", player.toString());
+        }
+
+        if (parsedEvent && parsedEvent.name === "RequestSent") {
+          const gameId = parsedEvent.args.gameId;
+          const requestId = parsedEvent.args.requestId;
+          const numwords = parsedEvent.args.numwords;
+
+          expect(gameId).to.equal(2);
+          expect(requestId).to.equal(2);
+          expect(numwords).to.equal(1);
+
+          console.log("Request sent Game 1 Game Id", gameId);
+          console.log("Request sent Game 1 Request Id", requestId);
+          console.log("Request sent Game 1 numwords", numwords);
+        }
+
+        if (parsedEvent && parsedEvent.name === "RequestFulfilled") {
+          const gameId = parsedEvent.args.gameId;
+          const requestId = parsedEvent.args.requestId;
+          const randomWords = parsedEvent.args.randomWords;
+          expect(gameId).to.equal(2);
+          expect(requestId).to.equal(2);
+          expect(randomWords).to.exist;
+
+          console.log("RequestFulfilled Game 1 Game Id", gameId);
+          console.log("RequestFulfilled Game 1 Request Id", requestId);
+          console.log("RequestFulfilled Game 1 numwords", randomWords);
+        }
+        if (parsedEvent && parsedEvent.name === "GameEnded") {
+          const gameId = parsedEvent.args.gameId;
+          const winner = parsedEvent.args.winner;
+
+          expect(gameId).to.equal(2);
+          expect(winner).to.exist;
+
+          console.log("Game Ended Game Id Game 1", gameId);
+          console.log("Game Ended Winner Game 1", winner);
+        }
+      }
 
       // game 2 latest balance check
       const player1Game2Balancelatest = await clamstoken.balanceOf(

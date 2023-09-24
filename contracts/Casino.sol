@@ -199,6 +199,12 @@ contract Casino is VRFConsumerBaseV2, Ownable {
         return games[_gameId].players;
     }
 
+    function checkForActiveSession(
+        uint256 _gameId
+    ) public view returns (Game memory) {
+        return games[_gameId];
+    }
+
     function currentTime() public view returns (uint) {
         return block.timestamp;
     }
