@@ -107,9 +107,9 @@ contract Casino is VRFConsumerBaseV2, Ownable {
         );
 
         fetchedGame.players.push(msg.sender);
-        fetchedGame.currentPot += _amount * 10 ** 18;
+        fetchedGame.currentPot += _amount;
 
-        clamsToken.transferFrom(msg.sender, address(this), _amount * 10 ** 18);
+        clamsToken.transferFrom(msg.sender, address(this), _amount);
 
         emit PlayerJoined(_gameId, msg.sender);
 
