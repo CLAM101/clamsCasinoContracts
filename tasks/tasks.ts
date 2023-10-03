@@ -11,4 +11,12 @@ export function createTasks() {
 
       console.log("Balance", balance.toString());
     });
+
+  task("fulfillMock", "Prints an account's balance")
+    .addParam("account", "The account's address")
+    .setAction(async (taskArgs) => {
+      const balance = await hre.ethers.provider.getBalance(taskArgs.account);
+
+      console.log("Balance", balance.toString());
+    });
 }
