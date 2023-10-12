@@ -3,6 +3,7 @@ import { HardhatUserConfig, task } from "hardhat/config";
 import * as dotenv from "dotenv";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-verify";
+import "hardhat-gas-reporter";
 dotenv.config();
 
 task("balance", "Prints an account's balance")
@@ -33,7 +34,7 @@ task("randomWords", "Simulate randomness fulfillment").setAction(
       const sudoRandomNumGame2 = [Math.trunc(Math.random() * 10000000)];
 
       const confirmationGame2 = await mock.fulfillRandomWordsWithOverride(
-        8,
+        2,
         "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9",
         sudoRandomNumGame2,
         { gasLimit: 300000 } // Adjust the gas limit as needed
@@ -52,6 +53,12 @@ const deployerPrivateKey = process.env.DEPLOYER_ACCOUNT_PRIVATE_KEY || "";
 
 const config: HardhatUserConfig = {
   solidity: "0.8.7",
+
+  gasReporter: {
+    enabled: true,
+    currency: "USD", // The currency to use for gas cost calculation
+    gasPrice: 100, // The gas price in gwei (can be changed)
+  },
   networks: {
     hardhat: {
       chainId: 1337,

@@ -20,6 +20,7 @@ async function main() {
   await casino.waitForDeployment();
 
   console.log("Casino address", casino.target);
+  console.log("token address", clamstoken.target);
 }
 
 main().catch((error) => {

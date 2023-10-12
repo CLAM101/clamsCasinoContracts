@@ -20,7 +20,7 @@ contract Casino is VRFConsumerBaseV2, Ownable {
     VRFCoordinatorV2Interface immutable COORDINATOR;
     uint64 immutable s_subscriptionId;
     bytes32 immutable s_keyHash;
-    uint32 constant CALLBACK_GAS_LIMIT = 100000000;
+    uint32 constant CALLBACK_GAS_LIMIT = 1500000;
     uint16 constant REQUEST_CONFIRMATIONS = 3;
     uint32 constant numWords = 1;
     uint256[] public requestIds;
